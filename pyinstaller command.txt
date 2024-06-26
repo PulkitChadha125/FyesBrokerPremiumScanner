@@ -1,0 +1,4 @@
+ pyinstaller --onefile --hidden-import fyres_apiv3 main.py
+
+
+"run inside PyCharm .venv"
