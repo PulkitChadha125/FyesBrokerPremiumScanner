@@ -38,7 +38,7 @@ def get_user_settings():
         print("Error happened in fetching symbol", str(e))
 
 
-get_user_settings()
+
 def get_api_credentials():
     credentials = {}
     
@@ -57,16 +57,7 @@ def get_api_credentials():
 
     return credentials
 
-credentials_dict = get_api_credentials()
-redirect_uri=credentials_dict.get('redirect_uri')
-client_id=credentials_dict.get('client_id')
-secret_key=credentials_dict.get('secret_key')
-grant_type=credentials_dict.get('grant_type')
-response_type=credentials_dict.get('response_type')
-state=credentials_dict.get('state')
-TOTP_KEY=credentials_dict.get('totpkey')
-FY_ID=credentials_dict.get('FY_ID')
-PIN=credentials_dict.get('PIN')
+
 
 
 
@@ -181,6 +172,7 @@ def fetch_history():
                 date_object = datetime.strptime(params['EXPIERY'], '%d-%b-%y')
                 new_date_string = date_object.strftime('%y%b').upper()
                 formatedsymbol = f"NSE:{params['SYMBOL']}{new_date_string}FUT"
+                print(f"{timestamp} fetch history {formatedsymbol}.. ")
                 data = FyresIntegration.fetchOHLC(formatedsymbol)
                 data['date'] = pd.to_datetime(data['date']).dt.strftime('%Y-%m-%d')
                 date_values = data['date'][:10]
@@ -245,6 +237,7 @@ def fetch_history():
         df.to_csv("premium_combined_pivoted_data.csv", index=False)
         data_formating()
 
+
     except Exception as e:
         print(f"fetch history error : {str(e)}")
 
@@ -254,11 +247,12 @@ def fetch_history():
 # fetch_history()
 
 
+once = False
 
 data_rows=[]
 def main_strategy():
-    global result_dict
-    once = False
+    global result_dict,once
+
     try:
         timestamp = datetime.now()
         timestamp = timestamp.strftime("%d/%m/%Y %H:%M:%S")
@@ -272,6 +266,7 @@ def main_strategy():
                 date_object = datetime.strptime(params['EXPIERY'], '%d-%b-%y')
                 new_date_string = date_object.strftime('%y%b').upper()
                 formatedsymbol = f"NSE:{params['SYMBOL']}{new_date_string}FUT"
+                print(f"{timestamp} Fetching data {formatedsymbol}")
                 data=FyresIntegration.fetchOHLC_Scanner(formatedsymbol)
                 df = pd.DataFrame(data)
                 first_row = df.iloc[0]
@@ -283,20 +278,24 @@ def main_strategy():
                 data_rows.append({'Symbol': symbol_value,'LTP': close, 'CombinedPremium': combined_pnl,
                                   'PERCENTAGEOF_LTP': percentof, 'PREMIUM_COLLECTED': PREMIUM_COLLECTED(lots,combined_pnl)})
 
-        if once==False:
-            once =True
-            fetch_history()
 
-        result_df = pd.DataFrame(data_rows)
-        df2=pd.read_csv("premium_combined_pivoted_data.csv")
-        merged_df = pd.merge(result_df, df2, on='Symbol',
-                             how='left')  # 'left' will keep all rows from df1 and merge df2 on the right
-        merged_df.to_csv("webdata.csv", index=False)
+            result_df = pd.DataFrame(data_rows)
+            result_df.to_csv("webdata.csv", index=False)
+            df2 = pd.read_csv("premium_combined_pivoted_data.csv")
+            merged_df = pd.merge(result_df, df2, on='Symbol',
+                                 how='left')
+            merged_df.to_csv("webdata.csv", index=False)
+            print(f"{timestamp} Process Compleated")
+
+
+
+
 
 
     except Exception as e:
         print("Error happened in Main strategy loop: ", str(e))
         traceback.print_exc()
+
 
 @app.route('/')
 def index():
@@ -311,12 +310,25 @@ def index():
     return render_template('index.html', html_table=html_table)
 
 if __name__ == '__main__':
+    get_user_settings()
+    credentials_dict = get_api_credentials()
+    redirect_uri = credentials_dict.get('redirect_uri')
+    client_id = credentials_dict.get('client_id')
+    secret_key = credentials_dict.get('secret_key')
+    grant_type = credentials_dict.get('grant_type')
+    response_type = credentials_dict.get('response_type')
+    state = credentials_dict.get('state')
+    TOTP_KEY = credentials_dict.get('totpkey')
+    FY_ID = credentials_dict.get('FY_ID')
+    PIN = credentials_dict.get('PIN')
     FyresIntegration.automated_login(client_id=client_id, redirect_uri=redirect_uri, secret_key=secret_key, FY_ID=FY_ID,
                                      PIN=PIN, TOTP_KEY=TOTP_KEY)
     symbols()
+    fetch_history()
     main_strategy()
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     scheduler = BackgroundScheduler()
     scheduler.add_job(main_strategy, 'interval', minutes=5)
     scheduler.start()
-    app.run(debug=True)
+    html_table = "<p>Loading data, please wait...</p>"
+    app.run()
